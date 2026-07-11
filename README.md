@@ -58,6 +58,21 @@ Transcribes, then summarizes via Claude (Haiku 4.5).
 - Body: `{"source": "..."}`
 - Result: `{"text": "...", "summary": "..."}`
 
+### `POST /transcribe/text/sync`
+Same as `/transcribe/text`, but synchronous: the HTTP response blocks until
+transcription actually finishes and returns the transcript directly, instead
+of a `job_id` to poll.
+- Body: `{"source": "<url or gs://path>"}`
+- Result: `{"text": "..."}`
+- Requires the same `X-API-Key` auth as the other public routes.
+- Cloud Run's request timeout is set to 900s (raised from the default 300s)
+  to give this endpoint room to finish -- expect this call can take a while
+  on long content. That timeout is service-wide, not specific to this route.
+```
+POST /transcribe/text/sync  {"source": "..."}
+  -> {"text": "..."}   (after transcription finishes, no polling)
+```
+
 ### `GET /status/{job_id}`
 Returns the full job document (status, mode, source, result, error, engine, timestamps).
 
