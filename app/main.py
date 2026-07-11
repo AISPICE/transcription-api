@@ -47,6 +47,20 @@ def transcribe_summary(body: TranscribeRequest):
     return _create_and_enqueue("summary", body.source)
 
 
+@app.post("/transcribe/text/sync", dependencies=[Depends(require_api_key)])
+def transcribe_text_sync(body: TranscribeRequest):
+    """Same as /transcribe/text but runs inline and blocks until done,
+    returning the transcript directly instead of a job_id to poll. Still
+    creates a job document (for Firestore visibility/debugging) but skips
+    Cloud Tasks entirely -- see pipeline.run_job for the actual work."""
+    job_id = jobs.create_job(mode="text", source=body.source)
+    pipeline.run_job(job_id)
+    job = jobs.get_job(job_id)
+    if job["status"] == "failed":
+        raise HTTPException(status_code=500, detail=job["error"])
+    return {"text": job["result"]["text"]}
+
+
 @app.get("/status/{job_id}", dependencies=[Depends(require_api_key)])
 def get_status(job_id: str):
     job = jobs.get_job(job_id)
