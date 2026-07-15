@@ -40,10 +40,11 @@ Plain transcript, no timing.
 
 ### `POST /transcribe/words`
 Word-level timing, matching the shape `edit.js`/`transcribe-assemblyai.js`
-already expect: `{word, start, end}` per word, **start/end in seconds**
-(not AssemblyAI's raw milliseconds), plus a bonus `confidence` field.
+already expect: `{word, start, end}` per word, **start/end in milliseconds**
+(AssemblyAI's native unit, passed through as-is), plus a bonus `confidence`
+field. Callers needing seconds must divide by 1000 themselves.
 - Body: `{"source": "<url or gs://path>"}`
-- Result: `{"text": "...", "words": [{"word": "...", "start": 1.28, "end": 1.56, "confidence": 0.98}, ...]}`
+- Result: `{"text": "...", "words": [{"word": "...", "start": 1280, "end": 1560, "confidence": 0.98}, ...]}`
 - This is the endpoint to use for anything needing frame-to-word alignment
   (e.g. a "watch this video" workflow) -- it accepts video sources directly
   across every supported platform, not audio-only.
