@@ -17,24 +17,41 @@ class TranscribeRequest(BaseModel):
     source: str  # YouTube/Instagram/TikTok URL, direct media URL, or gs://...
 
 
+class DisfluenciesRequest(TranscribeRequest):
+    # None means "use this endpoint's default" -- see transcribe_text/
+    # transcribe_words below. Deliberately not on TranslateRequest or the
+    # plain TranscribeRequest used by /transcribe/summary: those two modes
+    # always transcribe clean (disfluencies off), unaffected by this field.
+    disfluencies: bool | None = None
+
+
 class TranslateRequest(TranscribeRequest):
     target_language: str
 
 
-def _create_and_enqueue(mode: str, source: str, target_language: str | None = None) -> dict:
-    job_id = jobs.create_job(mode=mode, source=source, target_language=target_language)
+def _create_and_enqueue(
+    mode: str,
+    source: str,
+    target_language: str | None = None,
+    disfluencies: bool = False,
+) -> dict:
+    job_id = jobs.create_job(
+        mode=mode, source=source, target_language=target_language, disfluencies=disfluencies
+    )
     tasks_queue.enqueue_job(job_id)
     return {"job_id": job_id, "status": "queued"}
 
 
 @app.post("/transcribe/text", dependencies=[Depends(require_api_key)])
-def transcribe_text(body: TranscribeRequest):
-    return _create_and_enqueue("text", body.source)
+def transcribe_text(body: DisfluenciesRequest):
+    disfluencies = body.disfluencies if body.disfluencies is not None else False
+    return _create_and_enqueue("text", body.source, disfluencies=disfluencies)
 
 
 @app.post("/transcribe/words", dependencies=[Depends(require_api_key)])
-def transcribe_words(body: TranscribeRequest):
-    return _create_and_enqueue("words", body.source)
+def transcribe_words(body: DisfluenciesRequest):
+    disfluencies = body.disfluencies if body.disfluencies is not None else True
+    return _create_and_enqueue("words", body.source, disfluencies=disfluencies)
 
 
 @app.post("/transcribe/translate", dependencies=[Depends(require_api_key)])
@@ -48,12 +65,13 @@ def transcribe_summary(body: TranscribeRequest):
 
 
 @app.post("/transcribe/text/sync", dependencies=[Depends(require_api_key)])
-def transcribe_text_sync(body: TranscribeRequest):
+def transcribe_text_sync(body: DisfluenciesRequest):
     """Same as /transcribe/text but runs inline and blocks until done,
     returning the transcript directly instead of a job_id to poll. Still
     creates a job document (for Firestore visibility/debugging) but skips
     Cloud Tasks entirely -- see pipeline.run_job for the actual work."""
-    job_id = jobs.create_job(mode="text", source=body.source)
+    disfluencies = body.disfluencies if body.disfluencies is not None else False
+    job_id = jobs.create_job(mode="text", source=body.source, disfluencies=disfluencies)
     pipeline.run_job(job_id)
     job = jobs.get_job(job_id)
     if job["status"] == "failed":
