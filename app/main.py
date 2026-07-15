@@ -95,6 +95,8 @@ def init_upload(filename: str):
     with {"source": gcs_path} from the response -- at that point it's just
     the ordinary GCS case in sources.py, no special-casing needed downstream.
     """
+    import google.auth
+    from google.auth.transport import requests as gauth_requests
     from google.cloud import storage
 
     client = storage.Client()
@@ -102,11 +104,22 @@ def init_upload(filename: str):
     ext = Path(filename).suffix or ".mp4"
     blob_path = f"uploads/{uuid.uuid4().hex}{ext}"
     blob = bucket.blob(blob_path)
+
+    # Cloud Run's default credentials are token-only (no private key), so
+    # generate_signed_url() can't sign locally. Passing an explicit access
+    # token + service account email routes the signature through the IAM
+    # signBlob API instead -- requires roles/iam.serviceAccountTokenCreator
+    # on this service's own service account (self-impersonation).
+    credentials, _ = google.auth.default()
+    credentials.refresh(gauth_requests.Request())
+
     upload_url = blob.generate_signed_url(
         version="v4",
         expiration=900,
         method="PUT",
         content_type="application/octet-stream",
+        service_account_email=credentials.service_account_email,
+        access_token=credentials.token,
     )
     return {"upload_url": upload_url, "gcs_path": f"gs://{settings.upload_bucket}/{blob_path}"}
 
